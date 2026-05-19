@@ -219,6 +219,7 @@ type SlackAPI interface {
 	GetUsersPaginated(options ...slack.GetUsersOption) slack.UserPagination
 	GetUsersInfo(users ...string) (*[]slack.User, error)
 	PostMessageContext(ctx context.Context, channel string, options ...slack.MsgOption) (string, string, error)
+	UpdateMessageContext(ctx context.Context, channel, timestamp string, options ...slack.MsgOption) (string, string, string, error)
 	MarkConversationContext(ctx context.Context, channel, ts string) error
 	AddReactionContext(ctx context.Context, name string, item slack.ItemRef) error
 	RemoveReactionContext(ctx context.Context, name string, item slack.ItemRef) error
@@ -539,6 +540,10 @@ func (c *MCPSlackClient) SearchContext(ctx context.Context, query string, params
 
 func (c *MCPSlackClient) PostMessageContext(ctx context.Context, channelID string, options ...slack.MsgOption) (string, string, error) {
 	return c.slackClient.PostMessageContext(ctx, channelID, options...)
+}
+
+func (c *MCPSlackClient) UpdateMessageContext(ctx context.Context, channelID, timestamp string, options ...slack.MsgOption) (string, string, string, error) {
+	return c.slackClient.UpdateMessageContext(ctx, channelID, timestamp, options...)
 }
 
 func (c *MCPSlackClient) AddReactionContext(ctx context.Context, name string, item slack.ItemRef) error {
