@@ -195,3 +195,43 @@ func TestUnitEdgeRetryContextCancel(t *testing.T) {
 		t.Fatalf("expected exactly 1 call before cancellation, got %d", calls)
 	}
 }
+
+// TestUnitUsersListConcurrentBuckets calls UsersList with one channel ID and
+// one DM ID so splitDMs fills both buckets and both errgroup goroutines run
+// at once.  Under -race that exercises the path where the old shared-slice
+// append in UsersList could be flagged; it also pins that the two result
+// sets are joined in public-then-DM order.
+func TestUnitUsersListConcurrentBuckets(t *testing.T) {
+	jsonResp := func(body string) *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+	cl := newTestClient(t, func(r *http.Request) (*http.Response, error) {
+		t.Logf("fake got: %s", r.URL.String())
+		switch {
+		case strings.Contains(r.URL.Path, "users/list"):
+			return jsonResp(`{"ok":true,"results":[{"id":"U-PUB","name":"pub-user"}],"next_marker":""}`), nil
+		case strings.Contains(r.URL.Path, "conversations.view"):
+			return jsonResp(`{"ok":true,"users":[{"id":"U-DM","name":"dm-user"}]}`), nil
+		default:
+			t.Errorf("unexpected request URL: %s", r.URL)
+			return jsonResp(`{"ok":true}`), nil
+		}
+	})
+
+	uu, err := cl.UsersList(context.Background(), "C111", "D222")
+	if err != nil {
+		t.Fatalf("UsersList: %v", err)
+	}
+	if len(uu) != 2 {
+		t.Fatalf("got %d users, want 2: %+v", len(uu), uu)
+	}
+	// Public-channel users come first, DM users after — the order the old
+	// sequential-in-practice code produced.
+	if uu[0].ID != "U-PUB" || uu[1].ID != "U-DM" {
+		t.Errorf("user IDs = %q, %q; want U-PUB then U-DM", uu[0].ID, uu[1].ID)
+	}
+}
