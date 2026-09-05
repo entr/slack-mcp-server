@@ -299,7 +299,7 @@ func (ch *ConversationsHandler) ConversationsAddMessageHandler(ctx context.Conte
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully posted message to channel %s (ts=%s)", respChannel, respTimestamp)), nil
 }
 
-// ConversationsUpdateMessageHandler edits an existing message and returns it as CSV
+// ConversationsUpdateMessageHandler edits an existing message and returns a text confirmation
 func (ch *ConversationsHandler) ConversationsUpdateMessageHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ConversationsUpdateMessageHandler called", zap.Any("params", request.Params))
 

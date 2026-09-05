@@ -206,7 +206,7 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 
 	if shouldAddTool(ToolConversationsUpdateMessage, enabledTools, "SLACK_MCP_ADD_MESSAGE_TOOL") {
 		s.AddTool(mcp.NewTool(ToolConversationsUpdateMessage,
-			mcp.WithDescription("Edit an existing message you sent in a public channel, private channel, or direct message. Identify the message by channel_id and ts (original timestamp). Same formatting options as conversations_add_message."),
+			mcp.WithDescription("Edit an existing message you sent in a public channel, private channel, or direct message. Identify the message by channel_id and ts (original timestamp). Provide `text`, `blocks`, or both. IMPORTANT: with `content_type=text/markdown` (the default) the server converts `text` to Block Kit — write Markdown, NOT Slack mrkdwn, or content may be silently changed or deleted (same converter as conversations_add_message)."),
 			mcp.WithTitleAnnotation("Update Message"),
 			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("channel_id",
@@ -218,11 +218,12 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				mcp.Description("Timestamp of the message to edit, in format 1234567890.123456. This is the ts of the message returned when it was originally posted."),
 			),
 			mcp.WithString("text",
-				mcp.Description("New message text in specified content_type format."),
+				mcp.Description("New message text. For `content_type=text/markdown` (default), use Markdown, NOT Slack mrkdwn. Slack links such as `<url|label>` and `<url>` are silently deleted; use `[label](url)`. Mentions such as `<@U123>` are honored only in plain paragraphs — inside list items, headings, or block quotes they render as literal text. Use `**bold**`; `*text*` becomes italic. Reliable forms are plain paragraphs, `#` headings, inline code, fenced code blocks, and `> ` block quotes. Do not use tables, task lists, or `~~strikethrough~~`. For unformatted text, use `content_type=text/plain`."),
 			),
 			mcp.WithString("content_type",
 				mcp.DefaultString("text/markdown"),
-				mcp.Description("Content type of the new message. Default is 'text/markdown'. Allowed values: 'text/markdown', 'text/plain'. Ignored when blocks is provided."),
+				mcp.Enum("text/markdown", "text/plain"),
+				mcp.Description("Controls `text` when `blocks` is omitted. `text/markdown` (default): convert the Markdown forms documented in `text` to Block Kit; do not use Slack mrkdwn. `text/plain`: skip Markdown conversion; use for logs, code, or literal formatting characters. When `blocks` is provided, `content_type` does not affect rendering."),
 			),
 			mcp.WithString("blocks",
 				mcp.Description("Raw Slack Block Kit JSON array for rich message formatting. When provided, this takes precedence over text/content_type for rendering. The text parameter becomes the notification fallback text."),

@@ -38,6 +38,8 @@ Get messages from the channel (or DM) by channel_id, the last row/column in the 
   - `include_activity_messages` (boolean, default: false): If true, the response will include activity messages such as `channel_join` or `channel_leave`. Default is boolean false.
   - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.
   - `limit` (string, default: "1d"): Limit of messages to fetch in format of maximum ranges of time (e.g. 1d - 1 day, 1w - 1 week, 30d - 30 days, 90d - 90 days which is a default limit for free tier history) or number of messages (e.g. 50). Must be empty when 'cursor' is provided.
+  - `oldest` (string, optional): Only include messages after this absolute Slack timestamp (format `1234567890.123456`), exclusive (a message whose ts equals `oldest` is skipped). Useful for fetching only what is new since a known checkpoint or a channel's last-read marker; overrides the lower bound derived from a duration `limit`. Keep `oldest` set on every page while following `cursor`, or the lower bound is lost.
+- **Output:** CSV rows also include `ReplyCount` and `LatestReply` columns for thread parents (both empty for non-parent messages), so a client can detect new replies without re-fetching each thread.
 
 ### 2. conversations_replies:
 Get a thread of messages posted to a conversation by channelID and `thread_ts`, the last row/column in the response is used as `cursor` parameter for pagination if not empty.
@@ -47,6 +49,8 @@ Get a thread of messages posted to a conversation by channelID and `thread_ts`, 
   - `include_activity_messages` (boolean, default: false): If true, the response will include activity messages such as 'channel_join' or 'channel_leave'. Default is boolean false.
   - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.
   - `limit` (string, default: "1d"): Limit of messages to fetch in format of maximum ranges of time (e.g. 1d - 1 day, 1w - 1 week, 30d - 30 days, 90d - 90 days which is a default limit for free tier history) or number of messages (e.g. 50). Must be empty when 'cursor' is provided.
+  - `oldest` (string, optional): Only include replies after this absolute Slack timestamp (format `1234567890.123456`), exclusive; the thread's parent message is always returned. Overrides the lower bound derived from a duration `limit`. Keep `oldest` set on every page while following `cursor`.
+- **Output:** CSV rows also include `ReplyCount` and `LatestReply` columns for thread parents (both empty for non-parent messages).
 
 ### 3. conversations_add_message
 Add a message to a public channel, private channel, or direct message (DM, or IM) conversation by channel_id and thread_ts.
@@ -260,6 +264,30 @@ Get metadata and your read state for a single channel or DM by ID. Returns a one
 - **Parameters:**
   - `channel_id` (string, required): ID of the channel in format `Cxxxxxxxxxx` or its name starting with `#...` or `@...` (e.g., `#general`, `@username_dm`).
 
+### 20. conversations_update_message
+Edit an existing message you sent, identified by `channel_id` and `ts`. Uses the same Markdown-to-Block-Kit conversion as `conversations_add_message`.
+
+> **Note:** This is a write tool, disabled by default. It is enabled by the **same** `SLACK_MCP_ADD_MESSAGE_TOOL` gate as `conversations_add_message` (including its per-channel allow/deny list). You can only edit messages sent by the authenticated identity.
+
+- **Parameters:**
+  - `channel_id` (string, required): ID of the channel in format `Cxxxxxxxxxx` or its name starting with `#...` or `@...`.
+  - `ts` (string, required): Timestamp of the message to edit, in format `1234567890.123456`.
+  - `text` (string, optional): New message text. Same Markdown rules as `conversations_add_message` (write Markdown, not Slack mrkdwn).
+  - `content_type` (string, default: `text/markdown`; allowed: `text/markdown`, `text/plain`): Controls `text` when `blocks` is omitted.
+  - `blocks` (string, optional): JSON-encoded Slack Block Kit array. When provided, takes precedence over `text`/`content_type`.
+
+### 21. files_list
+List files shared in a channel or across the workspace. Returns file metadata (ID, name, type, size, uploader, permalink) as CSV with cursor pagination. Use a returned `file_id` with `attachment_get_data` to download content.
+
+> **Note:** This tool is disabled by default; enable it with the `SLACK_MCP_FILES_LIST_TOOL` environment variable. Requires the `files:read` scope on the token.
+
+- **Parameters:**
+  - `channel_id` (string, optional): Filter by channel ID (`Cxxxxxxxxxx`) or name (`#general`). If omitted, lists files across all channels.
+  - `user_id` (string, optional): Filter by uploader user ID (`Uxxxxxxxxxx`).
+  - `types` (string, default: `all`): Comma-separated file types: `all`, `spaces`, `snippets`, `images`, `gdocs`, `zips`, `pdfs`.
+  - `limit` (string, default: `50`): Maximum files to return (1-200).
+  - `cursor` (string, optional): Pagination cursor from the last row of the previous response.
+
 ## Resources
 
 The Slack MCP Server exposes two special directory resources for easy access to workspace metadata:
@@ -311,17 +339,18 @@ Fetches a CSV directory of all users in the workspace.
 | `SLACK_MCP_SERVER_CA`             | No        | `nil`                     | Path to CA certificate                                                                                                                                                                                                                                                                    |
 | `SLACK_MCP_SERVER_CA_TOOLKIT`     | No        | `nil`                     | Inject HTTPToolkit CA certificate to root trust-store for MitM debugging                                                                                                                                                                                                                  |
 | `SLACK_MCP_SERVER_CA_INSECURE`    | No        | `false`                   | Trust all insecure requests (NOT RECOMMENDED)                                                                                                                                                                                                                                             |
-| `SLACK_MCP_ADD_MESSAGE_TOOL`      | No        | `nil`                     | Enable message posting via `conversations_add_message` by setting it to `true` for all channels, a comma-separated list of channel IDs to whitelist specific channels, or use `!` before a channel ID to allow all except specified ones. If empty, the tool is only registered when explicitly listed in `SLACK_MCP_ENABLED_TOOLS`. |
+| `SLACK_MCP_ADD_MESSAGE_TOOL`      | No        | `nil`                     | Enable message posting via `conversations_add_message` **and message editing via `conversations_update_message`** by setting it to `true` for all channels, a comma-separated list of channel IDs to whitelist specific channels, or use `!` before a channel ID to allow all except specified ones. The same per-channel allow/deny policy applies to both tools. If empty, the tools are only registered when explicitly listed in `SLACK_MCP_ENABLED_TOOLS`. |
 | `SLACK_MCP_ADD_MESSAGE_MARK`      | No        | `nil`                     | When `conversations_add_message` is enabled (via `SLACK_MCP_ADD_MESSAGE_TOOL` or `SLACK_MCP_ENABLED_TOOLS`), setting this to `true` will automatically mark sent messages as read.                                                                                                        |
 | `SLACK_MCP_ADD_MESSAGE_UNFURLING` | No        | `nil`                     | Enable to let Slack unfurl posted links or set comma-separated list of domains e.g. `github.com,slack.com` to whitelist unfurling only for them. If text contains whitelisted and unknown domain unfurling will be disabled for security reasons.                                         |
 | `SLACK_MCP_REACTION_TOOL`        | No        | `nil`                     | Enable `reactions_add` and `reactions_remove` tools by setting to `true` for all channels, a comma-separated list of channel IDs to whitelist specific channels, or use `!` before a channel ID to allow all except specified ones. If empty, the tools are only registered when explicitly listed in `SLACK_MCP_ENABLED_TOOLS`. |
 | `SLACK_MCP_ATTACHMENT_TOOL`      | No        | `nil`                     | Enable the `attachment_get_data` tool by setting to `true`, `1`, or `yes`. Does not support channel-level restrictions. If empty, the tool is only registered when explicitly listed in `SLACK_MCP_ENABLED_TOOLS`. |
+| `SLACK_MCP_FILES_LIST_TOOL`      | No        | `nil`                     | Enable the read-only `files_list` tool by setting to `true`, `1`, or `yes`. Requires the `files:read` scope. Does not support channel-level restrictions. If empty, the tool is only registered when explicitly listed in `SLACK_MCP_ENABLED_TOOLS`. |
 | `SLACK_MCP_MARK_TOOL`             | No        | `nil`                     | Enable the `conversations_mark` tool by setting to `true` or `1`. Disabled by default to prevent accidental marking of messages as read.                                                                                                                                                  |
 | `SLACK_MCP_USERS_CACHE`           | No        | `~/Library/Caches/slack-mcp-server/users_cache.json` (macOS)<br>`~/.cache/slack-mcp-server/users_cache.json` (Linux)<br>`%LocalAppData%/slack-mcp-server/users_cache.json` (Windows) | Path to the users cache file. Used to cache Slack user information to avoid repeated API calls on startup. |
 | `SLACK_MCP_CHANNELS_CACHE`        | No        | `~/Library/Caches/slack-mcp-server/channels_cache_v2.json` (macOS)<br>`~/.cache/slack-mcp-server/channels_cache_v2.json` (Linux)<br>`%LocalAppData%/slack-mcp-server/channels_cache_v2.json` (Windows) | Path to the channels cache file. Used to cache Slack channel information to avoid repeated API calls on startup. |
 | `SLACK_MCP_LOG_LEVEL`             | No        | `info`                    | Log-level for stdout or stderr. Valid values are: `debug`, `info`, `warn`, `error`, `panic` and `fatal`                                                                                                                                                                                   |
 | `SLACK_MCP_GOVSLACK`              | No        | `nil`                     | Set to `true` to enable [GovSlack](https://slack.com/solutions/govslack) mode. Routes API calls to `slack-gov.com` endpoints instead of `slack.com` for FedRAMP-compliant government workspaces.                                                                                          |
-| `SLACK_MCP_ENABLED_TOOLS`         | No        | `nil`                     | Comma-separated list of tools to register. If empty, all read-only tools and usergroups tools are registered; write tools (`conversations_add_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`) require their specific env var OR must be explicitly listed here. When a write tool is listed here, it's enabled without channel restrictions. Available tools: `conversations_history`, `conversations_replies`, `conversations_info`, `conversations_add_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`, `conversations_search_messages`, `channels_list`, `usergroups_list`, `usergroups_me`, `usergroups_create`, `usergroups_update`, `usergroups_users_update`. |
+| `SLACK_MCP_ENABLED_TOOLS`         | No        | `nil`                     | Comma-separated list of tools to register. If empty, all read-only tools and usergroups tools are registered; write tools (`conversations_add_message`, `conversations_update_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`, `files_list`) require their specific env var OR must be explicitly listed here (`conversations_update_message` shares the `SLACK_MCP_ADD_MESSAGE_TOOL` gate). When a write tool is listed here, it's enabled without channel restrictions. Available tools: `conversations_history`, `conversations_replies`, `conversations_info`, `conversations_add_message`, `conversations_update_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`, `files_list`, `conversations_search_messages`, `channels_list`, `usergroups_list`, `usergroups_me`, `usergroups_create`, `usergroups_update`, `usergroups_users_update`. |
 
 *You need one of: `xoxp` (user), `xoxb` (bot), or both `xoxc`/`xoxd` tokens for authentication.
 
