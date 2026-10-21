@@ -153,13 +153,15 @@ func getMinRefreshInterval() time.Duration {
 // validateAuthAndGetTeamID performs auth validation on startup and returns the TeamID.
 // This ensures tokens are valid before proceeding and enables cache namespacing
 // to prevent cache contamination when using multiple Slack workspaces.
+// The auth.test response is returned so NewMCPSlackClient can reuse it instead
+// of calling auth.test a second time.
 // Returns an error if authentication fails - the server should not start with invalid credentials.
-func validateAuthAndGetTeamID(authProvider auth.Provider, logger *zap.Logger) (string, error) {
+func validateAuthAndGetTeamID(authProvider auth.Provider, logger *zap.Logger) (string, *slack.AuthTestResponse, error) {
 	xoxpToken := os.Getenv("SLACK_MCP_XOXP_TOKEN")
 	xoxcToken := os.Getenv("SLACK_MCP_XOXC_TOKEN")
 	xoxdToken := os.Getenv("SLACK_MCP_XOXD_TOKEN")
 	if xoxpToken == "demo" || (xoxcToken == "demo" && xoxdToken == "demo") {
-		return "demo", nil
+		return "demo", nil, nil
 	}
 
 	httpClient := transport.ProvideHTTPClient(authProvider.Cookies(), logger)
@@ -171,7 +173,7 @@ func validateAuthAndGetTeamID(authProvider auth.Provider, logger *zap.Logger) (s
 
 	authResp, err := slackClient.AuthTest()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	logger.Info("Authenticated to Slack",
@@ -179,7 +181,7 @@ func validateAuthAndGetTeamID(authProvider auth.Provider, logger *zap.Logger) (s
 		zap.String("team_id", authResp.TeamID),
 		zap.String("user", authResp.User))
 
-	return authResp.TeamID, nil
+	return authResp.TeamID, authResp, nil
 }
 
 // getCachePathWithTeamID returns a cache file path prefixed with TeamID for workspace isolation.
@@ -318,7 +320,9 @@ type ApiProvider struct {
 	fetchChannelsMu           sync.Mutex   // serializes fetchAndStoreChannels calls
 }
 
-func NewMCPSlackClient(authProvider auth.Provider, logger *zap.Logger) (*MCPSlackClient, error) {
+// NewMCPSlackClient builds the client. cachedAuth, when non-nil, is the auth.test
+// response from startup validation and saves a second round trip.
+func NewMCPSlackClient(authProvider auth.Provider, logger *zap.Logger, cachedAuth *slack.AuthTestResponse) (*MCPSlackClient, error) {
 	httpClient := transport.ProvideHTTPClient(authProvider.Cookies(), logger)
 
 	slackOpts := []slack.Option{slack.OptionHTTPClient(httpClient)}
@@ -327,9 +331,13 @@ func NewMCPSlackClient(authProvider auth.Provider, logger *zap.Logger) (*MCPSlac
 	}
 	slackClient := slack.New(authProvider.SlackToken(), slackOpts...)
 
-	authResp, err := slackClient.AuthTest()
-	if err != nil {
-		return nil, err
+	authResp := cachedAuth
+	if authResp == nil {
+		var err error
+		authResp, err = slackClient.AuthTest()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	authResponse := &slack.AuthTestResponse{
@@ -725,7 +733,7 @@ func newWithXOXP(transport string, authProvider auth.ValueAuth, logger *zap.Logg
 		err    error
 	)
 
-	teamID, err := validateAuthAndGetTeamID(authProvider, logger)
+	teamID, cachedAuth, err := validateAuthAndGetTeamID(authProvider, logger)
 	if err != nil {
 		logger.Fatal("Authentication failed - check your Slack tokens", zap.Error(err))
 	}
@@ -743,7 +751,7 @@ func newWithXOXP(transport string, authProvider auth.ValueAuth, logger *zap.Logg
 	if os.Getenv("SLACK_MCP_XOXP_TOKEN") == "demo" || (os.Getenv("SLACK_MCP_XOXC_TOKEN") == "demo" && os.Getenv("SLACK_MCP_XOXD_TOKEN") == "demo") {
 		logger.Info("Demo credentials are set, skip.")
 	} else {
-		client, err = NewMCPSlackClient(authProvider, logger)
+		client, err = NewMCPSlackClient(authProvider, logger, cachedAuth)
 		if err != nil {
 			logger.Fatal("Failed to create MCP Slack client", zap.Error(err))
 		}
@@ -785,7 +793,7 @@ func newWithXOXC(transport string, authProvider auth.ValueAuth, logger *zap.Logg
 		err    error
 	)
 
-	teamID, err := validateAuthAndGetTeamID(authProvider, logger)
+	teamID, cachedAuth, err := validateAuthAndGetTeamID(authProvider, logger)
 	if err != nil {
 		logger.Fatal("Authentication failed - check your Slack tokens", zap.Error(err))
 	}
@@ -803,7 +811,7 @@ func newWithXOXC(transport string, authProvider auth.ValueAuth, logger *zap.Logg
 	if os.Getenv("SLACK_MCP_XOXP_TOKEN") == "demo" || (os.Getenv("SLACK_MCP_XOXC_TOKEN") == "demo" && os.Getenv("SLACK_MCP_XOXD_TOKEN") == "demo") {
 		logger.Info("Demo credentials are set, skip.")
 	} else {
-		client, err = NewMCPSlackClient(authProvider, logger)
+		client, err = NewMCPSlackClient(authProvider, logger, cachedAuth)
 		if err != nil {
 			logger.Fatal("Failed to create MCP Slack client", zap.Error(err))
 		}

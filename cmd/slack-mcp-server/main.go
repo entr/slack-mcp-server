@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/korotovsky/slack-mcp-server/pkg/provider"
 	"github.com/korotovsky/slack-mcp-server/pkg/server"
@@ -87,14 +86,14 @@ func main() {
 
 	switch transport {
 	case "stdio":
-		// Wait for caches to be ready before accepting stdio requests.
-		// With stale-while-revalidate this exits in one tick (~100ms).
-		// On cold start (no cache), this blocks until the initial fetch completes.
-		for {
-			if ready, _ := p.IsReady(); ready {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
+		// Serve immediately while the caches warm in the background, like the
+		// sse and http transports. Blocking here made clients with a tight
+		// startup timeout give up on large workspaces. Handlers that need the
+		// caches return a retryable "cache warming up" error until they load.
+		if ready, _ := p.IsReady(); !ready {
+			logger.Info("Slack MCP Server is still warming up caches, serving immediately",
+				zap.String("context", "console"),
+			)
 		}
 		if err := s.ServeStdio(); err != nil {
 			logger.Fatal("Server error",

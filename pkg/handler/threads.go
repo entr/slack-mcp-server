@@ -86,6 +86,9 @@ type threadsScan struct {
 
 func (h *ThreadsHandler) ConversationsThreadsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("ConversationsThreadsHandler called", zap.Any("params", request.Params))
+	if err := requireCachesReady(h.apiProvider, h.logger); err != nil {
+		return nil, err
+	}
 
 	params, err := h.parseThreadsParams(ctx, request)
 	if err != nil {

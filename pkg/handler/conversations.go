@@ -738,6 +738,9 @@ func (ch *ConversationsHandler) ConversationsRepliesHandler(ctx context.Context,
 
 func (ch *ConversationsHandler) ConversationsSearchHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ConversationsSearchHandler called", zap.Any("params", request.Params))
+	if err := requireCachesReady(ch.apiProvider, ch.logger); err != nil {
+		return nil, err
+	}
 
 	params, err := ch.parseParamsToolSearch(ctx, request)
 	if err != nil {
@@ -792,6 +795,9 @@ type UnreadMessage struct {
 // ConversationsUnreadsHandler returns unread messages across all channels
 func (ch *ConversationsHandler) ConversationsUnreadsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ConversationsUnreadsHandler called", zap.Any("params", request.Params))
+	if err := requireCachesReady(ch.apiProvider, ch.logger); err != nil {
+		return nil, err
+	}
 
 	params := ch.parseParamsToolUnreads(request)
 

@@ -236,6 +236,9 @@ func (ch *ChannelsHandler) ChannelsHandler(ctx context.Context, request mcp.Call
 
 func (ch *ChannelsHandler) ChannelsMeHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ChannelsMeHandler called")
+	if err := requireCachesReady(ch.apiProvider, ch.logger); err != nil {
+		return nil, err
+	}
 
 	types := request.GetString("channel_types", "public_channel,private_channel")
 	cursor := request.GetString("cursor", "")
