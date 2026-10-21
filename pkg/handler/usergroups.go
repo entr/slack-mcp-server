@@ -42,7 +42,7 @@ func NewUsergroupsHandler(apiProvider *provider.ApiProvider, logger *zap.Logger)
 func (h *UsergroupsHandler) UsergroupsListHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("UsergroupsListHandler called", zap.Any("params", request.Params))
 
-	if ready, err := h.apiProvider.IsReady(); !ready {
+	if ready, err := h.apiProvider.AwaitReady(ctx); !ready {
 		h.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (h *UsergroupsHandler) UsergroupsListHandler(ctx context.Context, request m
 func (h *UsergroupsHandler) UsergroupsCreateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("UsergroupsCreateHandler called", zap.Any("params", request.Params))
 
-	if ready, err := h.apiProvider.IsReady(); !ready {
+	if ready, err := h.apiProvider.AwaitReady(ctx); !ready {
 		h.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (h *UsergroupsHandler) UsergroupsCreateHandler(ctx context.Context, request
 func (h *UsergroupsHandler) UsergroupsUpdateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("UsergroupsUpdateHandler called", zap.Any("params", request.Params))
 
-	if ready, err := h.apiProvider.IsReady(); !ready {
+	if ready, err := h.apiProvider.AwaitReady(ctx); !ready {
 		h.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (h *UsergroupsHandler) UsergroupsUpdateHandler(ctx context.Context, request
 func (h *UsergroupsHandler) UsergroupsUsersUpdateHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("UsergroupsUsersUpdateHandler called", zap.Any("params", request.Params))
 
-	if ready, err := h.apiProvider.IsReady(); !ready {
+	if ready, err := h.apiProvider.AwaitReady(ctx); !ready {
 		h.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -296,7 +296,7 @@ func (h *UsergroupsHandler) UsergroupsUsersUpdateHandler(ctx context.Context, re
 func (h *UsergroupsHandler) UsergroupsMeHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("UsergroupsMeHandler called", zap.Any("params", request.Params))
 
-	if ready, err := h.apiProvider.IsReady(); !ready {
+	if ready, err := h.apiProvider.AwaitReady(ctx); !ready {
 		h.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}

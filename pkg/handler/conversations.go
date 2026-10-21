@@ -169,7 +169,7 @@ func (ch *ConversationsHandler) UsersResource(ctx context.Context, request mcp.R
 	}
 
 	// provider readiness
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func (ch *ConversationsHandler) ConversationsAddMessageHandler(ctx context.Conte
 	ch.logger.Debug("ConversationsAddMessageHandler called", zap.Any("params", request.Params))
 
 	// provider readiness
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (ch *ConversationsHandler) ConversationsUpdateMessageHandler(ctx context.Co
 	ch.logger.Debug("ConversationsUpdateMessageHandler called", zap.Any("params", request.Params))
 
 	// provider readiness
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -360,7 +360,7 @@ func (ch *ConversationsHandler) ReactionsAddHandler(ctx context.Context, request
 	ch.logger.Debug("ReactionsAddHandler called", zap.Any("params", request.Params))
 
 	// provider readiness
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -396,7 +396,7 @@ func (ch *ConversationsHandler) ReactionsRemoveHandler(ctx context.Context, requ
 	ch.logger.Debug("ReactionsRemoveHandler called", zap.Any("params", request.Params))
 
 	// provider readiness
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -430,7 +430,7 @@ func (ch *ConversationsHandler) ReactionsRemoveHandler(ctx context.Context, requ
 func (ch *ConversationsHandler) UsersSearchHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("UsersSearchHandler called", zap.Any("params", request.Params))
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -495,7 +495,7 @@ func (ch *ConversationsHandler) UsersSearchHandler(ctx context.Context, request 
 func (ch *ConversationsHandler) FilesGetHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("FilesGetHandler called", zap.Any("params", request.Params))
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -738,7 +738,7 @@ func (ch *ConversationsHandler) ConversationsRepliesHandler(ctx context.Context,
 
 func (ch *ConversationsHandler) ConversationsSearchHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ConversationsSearchHandler called", zap.Any("params", request.Params))
-	if err := requireCachesReady(ch.apiProvider, ch.logger); err != nil {
+	if err := requireCachesReady(ctx, ch.apiProvider, ch.logger); err != nil {
 		return nil, err
 	}
 
@@ -795,7 +795,7 @@ type UnreadMessage struct {
 // ConversationsUnreadsHandler returns unread messages across all channels
 func (ch *ConversationsHandler) ConversationsUnreadsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ConversationsUnreadsHandler called", zap.Any("params", request.Params))
-	if err := requireCachesReady(ch.apiProvider, ch.logger); err != nil {
+	if err := requireCachesReady(ctx, ch.apiProvider, ch.logger); err != nil {
 		return nil, err
 	}
 
@@ -1768,7 +1768,7 @@ func (ch *ConversationsHandler) convertMessagesFromHistory(ctx context.Context, 
 		})
 	}
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		if warn && errors.Is(err, provider.ErrUsersNotReady) {
 			ch.logger.Warn(
 				"WARNING: Slack users sync is not ready yet, you may experience some limited functionality and see UIDs instead of resolved names as well as unable to query users by their @handles. Users sync is part of channels sync and operations on channels depend on users collection (IM, MPIM). Please wait until users are synced and try again",
@@ -1823,7 +1823,7 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(ctx context.Context, s
 		})
 	}
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		if warn && errors.Is(err, provider.ErrUsersNotReady) {
 			ch.logger.Warn(
 				"Slack users sync not ready; you may see raw UIDs instead of names and lose some functionality.",
@@ -1888,7 +1888,7 @@ func (ch *ConversationsHandler) parseParamsToolConversations(ctx context.Context
 	}
 
 	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
-		if ready, err := ch.apiProvider.IsReady(); !ready {
+		if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 			if errors.Is(err, provider.ErrUsersNotReady) {
 				ch.logger.Warn(
 					"WARNING: Slack users sync is not ready yet, you may experience some limited functionality and see UIDs instead of resolved names as well as unable to query users by their @handles. Users sync is part of channels sync and operations on channels depend on users collection (IM, MPIM). Please wait until users are synced and try again",

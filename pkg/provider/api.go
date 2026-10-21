@@ -1645,6 +1645,29 @@ func (ap *ApiProvider) IsReady() (bool, error) {
 	return true, nil
 }
 
+// ReadyWaitTimeout bounds how long AwaitReady blocks a tool call while the
+// caches warm up.
+var ReadyWaitTimeout = 30 * time.Second
+
+// AwaitReady is IsReady for tool handlers. stdio serves before the caches are
+// loaded, so a call made during warmup waits up to ReadyWaitTimeout (or until
+// ctx is done) instead of failing immediately with a not-ready error.
+func (ap *ApiProvider) AwaitReady(ctx context.Context) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, ReadyWaitTimeout)
+	defer cancel()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if ready, err := ap.IsReady(); ready || ctx.Err() != nil {
+			return ready, err
+		}
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
+		}
+	}
+}
+
 // SkipCache marks both users and channels caches as ready without loading
 // any data. Lookups by #channel-name or @username will not work; callers
 // must use channel/user IDs instead.

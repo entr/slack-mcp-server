@@ -55,7 +55,7 @@ func (ch *ChannelsHandler) ChannelsResource(ctx context.Context, request mcp.Rea
 
 	var channelList []Channel
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (ch *ChannelsHandler) ChannelsResource(ctx context.Context, request mcp.Rea
 func (ch *ChannelsHandler) ChannelsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ChannelsHandler called")
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
+	if ready, err := ch.apiProvider.AwaitReady(ctx); !ready {
 		ch.logger.Error("API provider not ready", zap.Error(err))
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (ch *ChannelsHandler) ChannelsHandler(ctx context.Context, request mcp.Call
 
 func (ch *ChannelsHandler) ChannelsMeHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	ch.logger.Debug("ChannelsMeHandler called")
-	if err := requireCachesReady(ch.apiProvider, ch.logger); err != nil {
+	if err := requireCachesReady(ctx, ch.apiProvider, ch.logger); err != nil {
 		return nil, err
 	}
 

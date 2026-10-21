@@ -35,7 +35,7 @@ func NewSavedHandler(apiProvider *provider.ApiProvider, logger *zap.Logger, conv
 
 func (h *SavedHandler) SavedListHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	h.logger.Debug("SavedListHandler called", zap.Any("params", request.Params))
-	if err := requireCachesReady(h.apiProvider, h.logger); err != nil {
+	if err := requireCachesReady(ctx, h.apiProvider, h.logger); err != nil {
 		return nil, err
 	}
 

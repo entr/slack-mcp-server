@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/korotovsky/slack-mcp-server/pkg/provider"
@@ -13,8 +14,9 @@ import (
 // the caches must not run against an empty snapshot and return misleading
 // "not found" results or bare IDs. The wrapped provider error stays matchable
 // with errors.Is(err, provider.ErrUsersNotReady / ErrChannelsNotReady).
-func requireCachesReady(p *provider.ApiProvider, logger *zap.Logger) error {
-	ready, err := p.IsReady()
+// It waits a bounded time (provider.ReadyWaitTimeout) before giving up.
+func requireCachesReady(ctx context.Context, p *provider.ApiProvider, logger *zap.Logger) error {
+	ready, err := p.AwaitReady(ctx)
 	if ready {
 		return nil
 	}
