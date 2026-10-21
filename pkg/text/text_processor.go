@@ -165,7 +165,30 @@ func renderedCoveredBy(normText, rendered string) bool {
 
 func lineCoveredBy(normText, line string) bool {
 	line = normalizeSpace(line)
-	return line == "" || strings.Contains(normText, line) || strings.Contains(normText, mrkdwnEscaper.Replace(line))
+	if line == "" || strings.Contains(normText, line) || strings.Contains(normText, mrkdwnEscaper.Replace(line)) {
+		return true
+	}
+	bare := normalizeSpace(stripEmoji(line))
+	return bare != "" && strings.Contains(normalizeSpace(stripEmoji(normText)), bare)
+}
+
+// emojiShortcode matches Slack :name: shortcodes, including chained skin-tone
+// suffixes such as :wave::skin-tone-2:.
+var emojiShortcode = regexp.MustCompile(`:[a-z0-9_+'-]+:`)
+
+// stripEmoji drops emoji shortcodes and emoji characters. Slack keeps an emoji
+// as a character in the text field but renders it as a :name: shortcode in
+// section blocks (or the other way round), so coverage must ignore the form.
+func stripEmoji(s string) string {
+	s = emojiShortcode.ReplaceAllString(s, " ")
+	return strings.Map(func(r rune) rune {
+		switch {
+		case unicode.Is(unicode.So, r), unicode.Is(unicode.Sk, r) && r > 0xFF,
+			r == '‍', r == '️', r >= 0x1F3FB && r <= 0x1F3FF:
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // normalizeSpace trims s and folds each run of spaces, tabs and non-breaking

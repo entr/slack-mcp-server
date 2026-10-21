@@ -55,6 +55,8 @@ go build -o build/slack-mcp-server ./cmd/slack-mcp-server
 
 - Tool calls made while the caches warm wait up to 30s (`AwaitReady`)
   instead of failing immediately.
+- Block-text dedupe ignores emoji form, so a message whose text has `✅` and
+  whose section block has `:white_check_mark:` is not rendered twice.
 
 ## Candidates not yet adopted
 

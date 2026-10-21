@@ -303,6 +303,24 @@ func TestMessageText(t *testing.T) {
 			want:    "from rich text",
 		},
 		{
+			name:    "section block with emoji shortcode covered by unicode text",
+			msgText: "deploy done ✅ at 14:29:35",
+			blocks:  slack.Blocks{BlockSet: []slack.Block{section("deploy done :white_check_mark: at 14:29:35")}},
+			want:    "deploy done ✅ at 14:29:35",
+		},
+		{
+			name:    "section block with unicode emoji covered by shortcode text",
+			msgText: "ship it :rocket::skin-tone-2:",
+			blocks:  slack.Blocks{BlockSet: []slack.Block{section("ship it 🚀🏽")}},
+			want:    "ship it :rocket::skin-tone-2:",
+		},
+		{
+			name:    "section block differing beyond emoji is still appended",
+			msgText: "alert ✅",
+			blocks:  slack.Blocks{BlockSet: []slack.Block{section(":white_check_mark: CPU back to normal")}},
+			want:    "alert ✅. :white_check_mark: CPU back to normal",
+		},
+		{
 			name:    "rich_text mirroring text is not duplicated",
 			msgText: "hello *world*",
 			blocks:  slack.Blocks{BlockSet: []slack.Block{richText("hello world")}},
