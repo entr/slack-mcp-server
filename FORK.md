@@ -62,6 +62,11 @@ go build -o build/slack-mcp-server ./cmd/slack-mcp-server
 
 - Search `has:` modifiers and `sort=timestamp` (cyberpapiii `2b832e1`)
 - Markdown to native rich_text when posting (provectus `a650672`, `96f716d`)
+- Native Slack drafts, parked (provectus `1f2b50a`..`96f716d`): `conversations_draft_message`
+  via edge `drafts.create/list/update`, with upsert per channel/thread, non-destructive
+  replace, and rich_text with real mentions. Planned scope is the core port only
+  (skip `mention_directory.go` and the acceptance harness). API drafts show in Slack's
+  Drafts list, not prefilled in the desktop composer.
 
 ## Syncing with upstream
 
