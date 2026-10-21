@@ -37,6 +37,10 @@ const defaultMinRefreshInterval = 30 * time.Second
 // when Slack is throttling; it only has to bound an infinite hang.
 const defaultBackgroundRefreshTimeout = 15 * time.Minute
 
+// revalidateRetryInterval is the minimum gap between runtime TTL revalidation
+// attempts for one cache, so a failing refresh is not retried on every read.
+const revalidateRetryInterval = 10 * time.Minute
+
 var AllChanTypes = []string{"mpim", "im", "public_channel", "private_channel"}
 var PrivateChanType = "private_channel"
 var PubChanType = "public_channel"
@@ -305,7 +309,9 @@ type ApiProvider struct {
 	usersSnapshot          atomic.Pointer[UsersCache]
 	usersCachePath         string
 	usersReady             atomic.Bool
-	refreshingUsers        atomic.Bool // true while a background refresh goroutine is running
+	usersFetchedAt         atomic.Int64 // unix nanos the snapshot was fetched or its cache file written; 0 = unknown
+	usersRevalAt           atomic.Int64 // unix nanos of the last TTL revalidation attempt
+	refreshingUsers        atomic.Bool  // true while a background refresh goroutine is running
 	lastForcedUsersRefresh time.Time
 	usersMu                sync.RWMutex // protects lastForcedUsersRefresh
 	fetchUsersMu           sync.Mutex   // serializes fetchAndStoreUsers calls
@@ -314,7 +320,9 @@ type ApiProvider struct {
 	channelsSnapshot          atomic.Pointer[ChannelsCache]
 	channelsCachePath         string
 	channelsReady             atomic.Bool
-	refreshingChannels        atomic.Bool // true while a background refresh goroutine is running
+	channelsFetchedAt         atomic.Int64 // unix nanos the snapshot was fetched or its cache file written; 0 = unknown
+	channelsRevalAt           atomic.Int64 // unix nanos of the last TTL revalidation attempt
+	refreshingChannels        atomic.Bool  // true while a background refresh goroutine is running
 	lastForcedChannelsRefresh time.Time
 	channelsMu                sync.RWMutex // protects lastForcedChannelsRefresh
 	fetchChannelsMu           sync.Mutex   // serializes fetchAndStoreChannels calls
@@ -942,6 +950,9 @@ func (ap *ApiProvider) refreshUsersInternal(ctx context.Context, force bool) err
 				}
 				ap.usersSnapshot.Store(newSnapshot)
 				ap.usersReady.Store(true)
+				if fi, err := os.Stat(ap.usersCachePath); err == nil {
+					ap.usersFetchedAt.Store(fi.ModTime().UnixNano())
+				}
 
 				// Check cache TTL using file modification time
 				cacheExpired := false
@@ -1260,6 +1271,7 @@ func (ap *ApiProvider) fetchAndStoreUsers(ctx context.Context) error {
 	}
 
 	ap.usersReady.Store(true)
+	ap.usersFetchedAt.Store(time.Now().UnixNano())
 
 	return nil
 }
@@ -1331,6 +1343,9 @@ func (ap *ApiProvider) refreshChannelsInternal(ctx context.Context, force bool) 
 				}
 				ap.channelsSnapshot.Store(newSnapshot)
 				ap.channelsReady.Store(true)
+				if fi, err := os.Stat(ap.channelsCachePath); err == nil {
+					ap.channelsFetchedAt.Store(fi.ModTime().UnixNano())
+				}
 
 				// Check cache TTL using file modification time
 				cacheExpired := false
@@ -1428,6 +1443,7 @@ func (ap *ApiProvider) fetchAndStoreChannels(ctx context.Context) error {
 	}
 
 	ap.channelsReady.Store(true)
+	ap.channelsFetchedAt.Store(time.Now().UnixNano())
 
 	return nil
 }
@@ -1575,12 +1591,46 @@ func (ap *ApiProvider) GetChannels(ctx context.Context, channelTypes []string) (
 	return res, nil
 }
 
+// revalidateIfExpired starts a background refresh when a cache read finds the
+// snapshot older than the TTL, so a long-running server does not keep renamed or
+// deactivated users and stale channel names until restart. The caller keeps
+// reading the current snapshot (stale-while-revalidate). spawn is singleflight
+// (the refreshing flag), and attempts are spaced by revalidateRetryInterval so
+// a failing refresh is not retried on every read. A zero TTL or unknown fetch
+// time disables the check.
+func (ap *ApiProvider) revalidateIfExpired(fetchedAt, attemptAt *atomic.Int64, spawn func()) {
+	if ap.cacheTTL <= 0 {
+		return
+	}
+	fetched := fetchedAt.Load()
+	if fetched == 0 {
+		return
+	}
+	now := time.Now()
+	if now.Sub(time.Unix(0, fetched)) <= ap.cacheTTL {
+		return
+	}
+	last := attemptAt.Load()
+	if last != 0 && now.Sub(time.Unix(0, last)) < revalidateRetryInterval {
+		return
+	}
+	if !attemptAt.CompareAndSwap(last, now.UnixNano()) {
+		return
+	}
+	ap.logger.Info("Cache is past its TTL, refreshing in the background",
+		zap.Duration("age", now.Sub(time.Unix(0, fetched))),
+		zap.Duration("ttl", ap.cacheTTL))
+	spawn()
+}
+
 func (ap *ApiProvider) ProvideUsersMap() *UsersCache {
+	ap.revalidateIfExpired(&ap.usersFetchedAt, &ap.usersRevalAt, ap.spawnBackgroundUsersRefresh)
 	// Atomic load - no lock needed, snapshot is immutable
 	return ap.usersSnapshot.Load()
 }
 
 func (ap *ApiProvider) ProvideChannelsMaps() *ChannelsCache {
+	ap.revalidateIfExpired(&ap.channelsFetchedAt, &ap.channelsRevalAt, ap.spawnBackgroundChannelsRefresh)
 	// Atomic load - no lock needed, snapshot is immutable
 	return ap.channelsSnapshot.Load()
 }
