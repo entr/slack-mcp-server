@@ -6,21 +6,35 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type tier struct {
-	// once every
-	t time.Duration
-	// burst
-	b int
+// Tier is a process-wide Slack rate-limit budget. Every caller of the same
+// tier shares one limiter, so concurrent tool calls split the burst instead of
+// each minting a fresh one.
+type Tier struct {
+	lim *rate.Limiter
 }
 
-func (t tier) Limiter() *rate.Limiter {
-	return rate.NewLimiter(rate.Every(t.t), t.b)
+func newTier(every time.Duration, burst int) Tier {
+	return Tier{lim: rate.NewLimiter(rate.Every(every), burst)}
+}
+
+// Limiter returns the shared limiter for this tier. Callers must not replace
+// its limit or burst.
+func (t Tier) Limiter() *rate.Limiter {
+	return t.lim
 }
 
 var (
-	// tier1 = tier{t: 1 * time.Minute, b: 2}
-	Tier2      = tier{t: 3 * time.Second, b: 3}
-	Tier2boost = tier{t: 300 * time.Millisecond, b: 5}
-	Tier3      = tier{t: 1200 * time.Millisecond, b: 4}
-	// tier4      = tier{t: 60 * time.Millisecond, b: 5}
+	// tier1 = newTier(1*time.Minute, 2)
+
+	// Tier2 paces the conversations.list pager behind the channel cache.
+	Tier2      = newTier(3*time.Second, 3)
+	Tier2boost = newTier(300*time.Millisecond, 5)
+	Tier3      = newTier(1200*time.Millisecond, 4)
+	// tier4      = newTier(60*time.Millisecond, 5)
+
+	// SearchMessages is search.messages' own Tier 2 bucket: Slack's 20/min
+	// sustained, with a burst that covers an agent's usual run of queries.
+	// Sharing Tier2's burst of 3 made 30% of field searches wait ~2.5s, and a
+	// 429 past the burst is still retried on Slack's Retry-After.
+	SearchMessages = newTier(3*time.Second, 10)
 )

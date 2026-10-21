@@ -754,7 +754,7 @@ func (ch *ConversationsHandler) ConversationsSearchHandler(ctx context.Context, 
 		Page:          params.page,
 	}
 
-	rl := limiter.Tier2.Limiter()
+	rl := limiter.SearchMessages.Limiter()
 	messagesRes, err := limiter.CallWithRetry(ctx, rl, 2, slackRetryAfter, func() (*slack.SearchMessages, error) {
 		msgs, _, err := ch.apiProvider.Slack().SearchContext(ctx, params.query, searchParams)
 		return msgs, err
