@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/slack-go/slack"
 	"go.uber.org/zap"
@@ -110,7 +111,8 @@ func BlocksToText(blocks slack.Blocks) string {
 
 // MessageText returns the readable text of a message. When msgText is empty
 // it falls back to the text of all blocks. Otherwise it appends text from
-// non-rich_text blocks that msgText doesn't already contain: bots and
+// non-rich_text blocks whose lines msgText doesn't already contain (compared
+// with spacing folded and Slack's &/</> escaping applied): bots and
 // integrations often send a short notification fallback in msgText and put
 // the actual content in section/header/context blocks. rich_text blocks are
 // skipped because they mirror msgText for messages typed by users.
@@ -119,13 +121,15 @@ func MessageText(msgText string, blocks slack.Blocks) string {
 		return BlocksToText(blocks)
 	}
 
+	norm := normalizeSpace(msgText)
+
 	var extra []string
 	for _, block := range blocks.BlockSet {
 		if _, ok := block.(*slack.RichTextBlock); ok {
 			continue
 		}
 		blockText := BlocksToText(slack.Blocks{BlockSet: []slack.Block{block}})
-		if blockText != "" && !strings.Contains(msgText, blockText) {
+		if blockText != "" && !renderedCoveredBy(norm, blockText) {
 			extra = append(extra, blockText)
 		}
 	}
@@ -140,6 +144,50 @@ func MessageText(msgText string, blocks slack.Blocks) string {
 	}
 
 	return msgText + sep + strings.Join(extra, " ")
+}
+
+// mrkdwnEscaper applies the escaping Slack gives the text field, so a block's
+// literal text can be looked up in it.
+var mrkdwnEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+// renderedCoveredBy reports whether every line of a block's rendered text
+// already appears in normText (the output of normalizeSpace on the message
+// text). A verbatim whole-block comparison misses once spacing or Slack's
+// &/</> escaping differ between the text field and the block.
+func renderedCoveredBy(normText, rendered string) bool {
+	for _, line := range strings.Split(rendered, "\n") {
+		if !lineCoveredBy(normText, line) {
+			return false
+		}
+	}
+	return true
+}
+
+func lineCoveredBy(normText, line string) bool {
+	line = normalizeSpace(line)
+	return line == "" || strings.Contains(normText, line) || strings.Contains(normText, mrkdwnEscaper.Replace(line))
+}
+
+// normalizeSpace trims s and folds each run of spaces, tabs and non-breaking
+// spaces into one space, keeping newlines. The text field and the blocks of
+// one message disagree on spacing, and search collapses it differently from
+// history.
+func normalizeSpace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inRun := false
+	for _, r := range strings.TrimSpace(s) {
+		if r != '\n' && (unicode.IsSpace(r) || r == '\u00a0' || r == '\u202f') {
+			if !inRun {
+				b.WriteByte(' ')
+			}
+			inRun = true
+			continue
+		}
+		inRun = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // FilesToText extracts text metadata from email file attachments.

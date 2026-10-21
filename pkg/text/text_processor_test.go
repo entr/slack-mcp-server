@@ -338,6 +338,36 @@ func TestMessageText(t *testing.T) {
 			}},
 			want: "summary. detail",
 		},
+		{
+			// Agent-posted messages repeat the text field in mrkdwn sections whose
+			// lines are not one verbatim substring of it.
+			name:    "sections repeating lines of the text are not duplicated",
+			msgText: "Codex here — feedback landed: • Site: stronger color\n• Domains: /mx check\nI closed issue #55. No deploy.",
+			blocks: slack.Blocks{BlockSet: []slack.Block{
+				section("Codex here — feedback landed:"),
+				section("• Site: stronger color\n• Domains: /mx check"),
+				section("I closed issue #55. No deploy."),
+			}},
+			want: "Codex here — feedback landed: • Site: stronger color\n• Domains: /mx check\nI closed issue #55. No deploy.",
+		},
+		{
+			name:    "section with &/< unescaped is covered by escaped text",
+			msgText: "Build &amp; test &lt;ok&gt;",
+			blocks:  slack.Blocks{BlockSet: []slack.Block{section("Build & test <ok>")}},
+			want:    "Build &amp; test &lt;ok&gt;",
+		},
+		{
+			name:    "spacing differences are ignored",
+			msgText: "feedback landed:  Site: stronger\u00a0color",
+			blocks:  slack.Blocks{BlockSet: []slack.Block{section("feedback  landed:\nSite: stronger color")}},
+			want:    "feedback landed:  Site: stronger\u00a0color",
+		},
+		{
+			name:    "section with a line the text lacks is still appended",
+			msgText: "Codex here — feedback landed:",
+			blocks:  slack.Blocks{BlockSet: []slack.Block{section("Codex here — feedback landed:\n*Next:* ship Friday")}},
+			want:    "Codex here — feedback landed:. Codex here — feedback landed:\n*Next:* ship Friday",
+		},
 	}
 
 	for _, tt := range tests {
